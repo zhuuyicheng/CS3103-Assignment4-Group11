@@ -46,8 +46,8 @@ def main(local_port: int, remote_port: int, duration: float):
         skipped_count = api.get_skipped_count()
         print()
         print(f"[Receiver] Received {reliable_count} reliable packets")
-        print(f"[Receiver] Received {unreliable_count} unreliable packets")
         print(f"[Receiver] Skipped {skipped_count} reliable packets")
+        print(f"[Receiver] Received {unreliable_count} unreliable packets")
         print(f"[Receiver] Total: {reliable_count + unreliable_count} packets")
         api.close()
 
