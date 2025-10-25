@@ -44,11 +44,11 @@ def main(local_port: int, remote_port: int, duration: float, rate: float):
     except KeyboardInterrupt:
         print("\n[Sender] Interrupted by user")
     finally:
+        api.close()
         print()
         print(f"[Sender] Sent {reliable_count} reliable packets")
         print(f"[Sender] Sent {unreliable_count} unreliable packets")
         print(f"[Sender] Total: {packet_id} packets")
-        api.close()
 
 
 if __name__ == '__main__':
