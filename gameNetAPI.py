@@ -2,8 +2,8 @@ import socket
 import threading
 import time
 from typing import Optional, Tuple
-from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PACKET_SIZE
-from sender import HUDPSender, TIMEOUT
+from packet import HUDPPacket
+from sender import HUDPSender
 from receiver import HUDPReceiver
 
 
