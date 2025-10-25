@@ -5,7 +5,7 @@ from typing import Dict, Tuple
 from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PAYLOAD_SIZE, MAX_PACKET_SIZE
 
 WINDOW_SIZE = 32
-TIMEOUT = 1.0  # seconds
+TIMEOUT = 0.2  # 200ms
 MAX_RETRIES = 5
 
 class HUDPSender:
@@ -33,14 +33,15 @@ class HUDPSender:
         self.timer_thread = threading.Thread(target=self._retransmit_timer, daemon=True)
         self.timer_thread.start()
     
-    def send_unreliable(self, data: bytes) -> bool:
+    def send_unreliable(self, data: bytes) -> int:
         """Send data on unreliable channel (fire and forget)"""
         if len(data) > MAX_PAYLOAD_SIZE:
             raise ValueError(f"Payload too large: {len(data)} > {MAX_PAYLOAD_SIZE}")
         
+        seq = self.unreliable_seq
         packet = HUDPPacket(
             channel_type=CHANNEL_UNRELIABLE,
-            seq_num=self.unreliable_seq,
+            seq_num=seq,
             ack_num=0,
             timestamp=time.time(),
             payload=data
@@ -48,9 +49,9 @@ class HUDPSender:
         self.unreliable_seq += 1
         
         self.sock.sendto(packet.serialize(), self.dest_addr)
-        return True
+        return seq
     
-    def send_reliable(self, data: bytes) -> bool:
+    def send_reliable(self, data: bytes) -> int:
         """Send data on reliable channel with Selective Repeat"""
         with self.lock:
             # Wait if window is full
@@ -74,7 +75,7 @@ class HUDPSender:
             self.window[seq] = (packet, time.time(), 0)
             self.next_seq += 1
         
-        return True
+        return seq
     
     def _ack_receiver(self):
         """Background thread to receive ACKs"""
@@ -96,6 +97,9 @@ class HUDPSender:
         with self.lock:
             # Remove ACKed packet from window
             if ack_num in self.window:
+                packet, sent_time, retries = self.window[ack_num]
+                rtt = time.time() - packet.timestamp
+                print(f"[Sender] ACK received for seq={ack_num}, RTT={rtt*1000:.1f} ms, retries={retries}")
                 del self.window[ack_num]
             
             # Slide window base
@@ -114,13 +118,13 @@ class HUDPSender:
                 for seq, (packet, sent_time, retries) in list(self.window.items()):
                     if time.time() - sent_time > TIMEOUT:
                         if retries >= MAX_RETRIES:
-                            print(f"Max retries reached for seq {seq}, dropping")
+                            print(f"[Sender] Max retries reached for seq {seq}, dropping")
                             del self.window[seq]
                         else:
                             # Retransmit
                             self.sock.sendto(packet.serialize(), self.dest_addr)
                             self.window[seq] = (packet, time.time(), retries + 1)
-                            print(f"Retransmitting seq {seq} (attempt {retries + 1})")
+                            print(f"[Sender] Retransmitting seq {seq} (attempt {retries + 1})")
     
     def close(self):
         """Stop sender threads"""
