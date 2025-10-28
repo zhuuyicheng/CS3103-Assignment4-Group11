@@ -57,16 +57,16 @@ class HUDPReceiver:
         """Handle unreliable channel packet (no ACK)"""
         self.unreliable_queue.put(packet)
     
-    def recv_reliable(self, timeout: Optional[float] = None) -> Optional[bytes]:
+    def recv_reliable(self, timeout: Optional[float] = 0.2) -> Optional[HUDPPacket]:
         """Receive data from reliable channel (ordered)"""
         packet = self.reliable_buffer.next_packet(timeout)
-        return packet.payload if packet else None
-    
-    def recv_unreliable(self, timeout: Optional[float] = None) -> Optional[bytes]:
+        return packet if packet else None
+
+    def recv_unreliable(self, timeout: Optional[float] = 0.2) -> Optional[HUDPPacket]:
         """Receive data from unreliable channel (unordered)"""
         try:
             packet = self.unreliable_queue.get(timeout=timeout)
-            return packet.payload
+            return packet
         except queue.Empty:
             return None
     
@@ -85,39 +85,49 @@ class SelectiveRepeatBuffer:
         self.rcv_base = 0  # Next expected sequence number
         self.buffer: Dict[int, HUDPPacket] = {}
         self.ready_queue = queue.Queue()
+        self.lock = threading.Lock() # Lock for rcv_base and buffer
     
     def insert(self, packet: HUDPPacket) -> bool:
         """Insert packet into buffer and check if it's in window"""
         seq = packet.seq_num
         
-        # Check if packet is within window
-        if seq < self.rcv_base:
-            # Duplicate packet, already delivered
-            return False
+        with self.lock:
+            # Check if packet is within window
+            if seq < self.rcv_base:
+                # Duplicate packet, already delivered
+                return False
+            
+            if seq >= self.rcv_base + self.window_size:
+                # Out of window, drop
+                return False
         
-        if seq >= self.rcv_base + self.window_size:
-            # Out of window, drop
-            return False
+            # Add to buffer if not already received
+            if seq not in self.buffer:
+                self.buffer[seq] = packet
+
+            # current packet might be rcv_base
+            # Deliver consecutive packets starting from rcv_base         
+            while self.rcv_base in self.buffer:
+                packet = self.buffer.pop(self.rcv_base)
+                self.ready_queue.put(packet)
+                self.rcv_base += 1
         
-        # Add to buffer if not already received
-        if seq not in self.buffer:
-            self.buffer[seq] = packet
-        
-        # Deliver consecutive packets starting from rcv_base
-        self._deliver_ready_packets()
         return True
-    
-    def _deliver_ready_packets(self):
-        """Deliver all consecutive packets from rcv_base"""
-        while self.rcv_base in self.buffer:
-            packet = self.buffer.pop(self.rcv_base)
-            self.ready_queue.put(packet)
-            self.rcv_base += 1
-    
+
     def next_packet(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
         """Get next ordered packet (blocking)"""
         try:
             return self.ready_queue.get(timeout=timeout)
         except queue.Empty:
+            with self.lock:
+                print(f"[Receiver] Skipped seq {self.rcv_base}")
+                self.rcv_base += 1
+
+                # new rcv_base might already be buffered
+                # Deliver consecutive packets starting from rcv_base         
+                while self.rcv_base in self.buffer:
+                    packet = self.buffer.pop(self.rcv_base)
+                    self.ready_queue.put(packet)
+                    self.rcv_base += 1
             return None
         

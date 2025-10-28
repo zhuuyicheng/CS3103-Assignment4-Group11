@@ -25,7 +25,7 @@ class GameNetAPI:
         self.receiver = HUDPReceiver(self.sock)
         
         # Replace receiver's buffer with skip-aware buffer
-        self.receiver.reliable_buffer = SkipAwareSelectiveRepeatBuffer(32, skip_threshold)  # type: ignore
+        # self.receiver.reliable_buffer = SkipAwareSelectiveRepeatBuffer(32, skip_threshold)  # type: ignore
         
         # Track packet statistics
         self.sent_reliable = 0
@@ -41,20 +41,14 @@ class GameNetAPI:
             seq = self.sender.send_unreliable(payload)
             self.sent_unreliable += 1
             return seq
-    
-    def recv_reliable(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
-        """Receive from reliable channel (returns full packet for logging)"""
-        packet = self.receiver.reliable_buffer.next_packet(timeout)
-        return packet
-    
-    def recv_unreliable(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
-        """Receive from unreliable channel (returns full packet for logging)"""
-        try:
-            packet = self.receiver.unreliable_queue.get(timeout=timeout)
-            return packet
-        except:
-            return None
-    
+
+    def recv(self, reliable: bool = False) -> Optional[HUDPPacket]:
+        """Receive from both reliable and unreliable channels"""
+        if reliable:
+            return self.receiver.recv_reliable(timeout=self.skip_threshold)
+        else:
+            return self.receiver.recv_unreliable(timeout=self.skip_threshold)
+
     def get_skipped_count(self) -> int:
         """Get the number of packets skipped due to timeout"""
         # The receiver.reliable_buffer may implement different buffer classes;
@@ -65,10 +59,7 @@ class GameNetAPI:
         """Close the API and cleanup resources"""
         self.sender.close()
         self.receiver.close()
-        try:
-            self.sock.close()
-        except:
-            pass
+        self.sock.close()
 
 
 class SkipAwareSelectiveRepeatBuffer:

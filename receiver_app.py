@@ -21,7 +21,7 @@ def main(local_port: int, remote_port: int, duration: float):
     try:
         while time.time() < end_time:
             # Try receiving from reliable channel
-            pkt = api.recv_reliable(timeout=0.05)
+            pkt = api.recv(reliable=True)
             if pkt:
                 arrival_time = time.time()
                 latency_ms = (arrival_time - pkt.timestamp) * 1000
@@ -30,7 +30,7 @@ def main(local_port: int, remote_port: int, duration: float):
                       f"latency={latency_ms:.1f} ms, payload={pkt.payload.decode()}")
             
             # Try receiving from unreliable channel
-            pkt = api.recv_unreliable(timeout=0.0)
+            pkt = api.recv(reliable=False)
             if pkt:
                 arrival_time = time.time()
                 latency_ms = (arrival_time - pkt.timestamp) * 1000
