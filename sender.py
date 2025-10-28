@@ -14,7 +14,6 @@ class HUDPSender:
     def __init__(self, sock: socket.socket, dest_addr: Tuple[str, int]):
         self.sock = sock
         self.dest_addr = dest_addr
-        self.reliable_seq = 0
         self.unreliable_seq = 0
         
         # Reliable channel state
@@ -56,7 +55,7 @@ class HUDPSender:
         with self.lock:
             # Wait if window is full
             while self.next_seq >= self.send_base + WINDOW_SIZE:
-                # self.lock is released while waiting and re-acquired afterwards
+                # self.lock is released while waiting and re-acquired upon wake-up
                 self.condition.wait()
             
             seq = self.next_seq
@@ -98,7 +97,7 @@ class HUDPSender:
             # Remove ACKed packet from window
             if ack_num in self.window:
                 packet, sent_time, retries = self.window[ack_num]
-                rtt = time.time() - packet.timestamp
+                rtt = time.time() - sent_time
                 print(f"[Sender] ACK received for seq={ack_num}, RTT={rtt*1000:.1f} ms, retries={retries}")
                 del self.window[ack_num]
             
