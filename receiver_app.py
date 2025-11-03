@@ -1,8 +1,6 @@
 import time
 import argparse
 from gameNetAPI import GameNetAPI
-from packet import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE
-
 
 def main(local_port: int, remote_port: int, duration: float):
     """Receiver application that displays received packets with detailed logs"""
@@ -14,37 +12,17 @@ def main(local_port: int, remote_port: int, duration: float):
     print()
     
     api = GameNetAPI(local_addr, remote_addr)
-    
     end_time = time.time() + duration
-    reliable_pkts_received = 0
-    reliable_bytes_received = 0
-    unreliable_pkts_received = 0
-    unreliable_bytes_received = 0
     
     try:
         while time.time() < end_time:
             # Try receiving from reliable channel
-            pkt = api.recv()
-            if pkt:
-                latency_ms = (time.time() - pkt.timestamp) * 1000
-
-                if pkt.channel_type ==  CHANNEL_RELIABLE:
-                    print(f"[Receiver app] Received RELIABLE seq={pkt.seq_num}, latency={latency_ms:.1f} ms")
-                    reliable_pkts_received += 1
-                    reliable_bytes_received += len(pkt.payload)
-                elif pkt.channel_type ==  CHANNEL_UNRELIABLE:
-                    print(f"[Receiver app] Received UNRELIABLE seq={pkt.seq_num}, latency={latency_ms:.1f} ms")
-                    unreliable_pkts_received += 1
-                    unreliable_bytes_received += len(pkt.payload)
-    
+            api.recv()
     except KeyboardInterrupt:
         print("\n[Receiver app] Interrupted by user")
     finally:
-        print()
-        print(f"[Receiver app] RELIABLE: Packets received = {reliable_pkts_received}, throughput = {(reliable_bytes_received / duration):.2f} bytes/s")
-        print(f"[Receiver app] UNRELIABLE: Packets received = {unreliable_pkts_received}, throughput = {(unreliable_bytes_received / duration):.2f} bytes/s")
         api.close()
-
+        api.display_metrics(duration)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='H-UDP Receiver Application')

@@ -43,8 +43,6 @@ def main(local_port: int, remote_port: int, duration: float, rate: float):
     interval = 1.0 / rate
     end_time = time.time() + duration
     packet_id = 0
-    reliable_count = 0
-    unreliable_count = 0
     
     try:
         while time.time() < end_time:
@@ -52,26 +50,14 @@ def main(local_port: int, remote_port: int, duration: float, rate: float):
             is_reliable = random.choice([True, False])          
             mock_data = generate_mock_game_data(packet_id, is_reliable)
             payload = mock_data.encode()
-            seq = api.send(payload, reliable=is_reliable)
-            
-            if is_reliable:
-                print(f"[Sender app] Sent RELIABLE seq={seq}")
-                reliable_count += 1
-            else:
-                print(f"[Sender app] Sent UNRELIABLE seq={seq}")
-                unreliable_count += 1
-            
+            api.send(payload, reliable=is_reliable)
             packet_id += 1
             time.sleep(interval)
-    
     except KeyboardInterrupt:
-        print("\n[Sender] Interrupted by user")
+        print("\n[Sender app] Interrupted by user")
     finally:
         api.close()
-        print()
-        print(f"[Sender app] RELIABLE: Packets sent = {reliable_count}")
-        print(f"[Sender app] UNRELIABLE: Packets sent = {unreliable_count}")
-
+        api.display_metrics(duration)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='H-UDP Sender Application')
