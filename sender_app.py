@@ -1,16 +1,42 @@
 import time
 import random
 import argparse
+import json
 from gameNetAPI import GameNetAPI
 
+def generate_mock_game_data(packet_id: int, is_reliable: bool) -> str:
+    """Generate mock game data based on packet type"""
+    if is_reliable:
+        # Reliable packets: critical game events
+        event_type = random.choice(['join', 'score', 'level', 'item'])
+        if event_type == 'join':
+            return json.dumps({"join": packet_id, "name": f"P{packet_id % 10}"})
+        elif event_type == 'score':
+            return json.dumps({"score": random.randint(0, 999)})
+        elif event_type == 'level':
+            return json.dumps({"level": packet_id % 5 + 1})
+        else:  # item
+            return json.dumps({"item": random.choice(["coin", "gem", "key"]), "val": random.randint(10, 50)})
+    else:
+        # Unreliable packets: frequent position/state updates
+        update_type = random.choice(['pos', 'vel', 'rot', 'anim'])
+        if update_type == 'pos':
+            return json.dumps({"x": random.randint(0, 800), "y": random.randint(0, 600)})
+        elif update_type == 'vel':
+            return json.dumps({"vx": random.randint(-50, 50), "vy": random.randint(-50, 50)})
+        elif update_type == 'rot':
+            return json.dumps({"angle": random.randint(0, 360)})
+        else:  # anim
+            return json.dumps({"frame": packet_id % 8, "state": random.choice(["idle", "run", "jump"])})
 
 def main(local_port: int, remote_port: int, duration: float, rate: float):
     """Sender application that sends random reliable/unreliable game packets"""
     local_addr = ('0.0.0.0', local_port)
     remote_addr = ('127.0.0.1', remote_port)
     
-    print(f"[Sender] Starting on port {local_port}, sending to port {remote_port}")
-    print(f"[Sender] Duration: {duration}s, Rate: {rate} pps")
+    print(f"[Sender app] Starting on port {local_port}, sending to port {remote_port}")
+    print(f"[Sender app] Duration: {duration}s, Rate: {rate} pps")
+    print()
     
     api = GameNetAPI(local_addr, remote_addr)
     
@@ -23,19 +49,16 @@ def main(local_port: int, remote_port: int, duration: float, rate: float):
     try:
         while time.time() < end_time:
             # Randomly choose reliable or unreliable (50/50)
-            is_reliable = random.choice([True, False])
+            is_reliable = random.choice([True, False])          
+            mock_data = generate_mock_game_data(packet_id, is_reliable)
+            payload = mock_data.encode()
+            seq = api.send(payload, reliable=is_reliable)
             
             if is_reliable:
-                # Game state update (reliable)
-                payload = f'{{"type":"game_state","id":{packet_id},"ts":{time.time():.3f}}}'.encode()
-                seq = api.send(payload, reliable=True)
-                print(f"[Sender] Sent RELIABLE seq={seq}, id={packet_id}, ts={time.time():.3f}")
+                print(f"[Sender app] Sent RELIABLE seq={seq}")
                 reliable_count += 1
             else:
-                # Movement update (unreliable)
-                payload = f'{{"type":"movement","id":{packet_id},"ts":{time.time():.3f}}}'.encode()
-                seq = api.send(payload, reliable=False)
-                print(f"[Sender] Sent UNRELIABLE seq={seq}, id={packet_id}, ts={time.time():.3f}")
+                print(f"[Sender app] Sent UNRELIABLE seq={seq}")
                 unreliable_count += 1
             
             packet_id += 1
@@ -46,9 +69,8 @@ def main(local_port: int, remote_port: int, duration: float, rate: float):
     finally:
         api.close()
         print()
-        print(f"[Sender] Sent {reliable_count} reliable packets")
-        print(f"[Sender] Sent {unreliable_count} unreliable packets")
-        print(f"[Sender] Total: {packet_id} packets")
+        print(f"[Sender app] RELIABLE: Packets sent = {reliable_count}")
+        print(f"[Sender app] UNRELIABLE: Packets sent = {unreliable_count}")
 
 
 if __name__ == '__main__':
