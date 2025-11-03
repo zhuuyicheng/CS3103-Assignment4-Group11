@@ -11,8 +11,8 @@ class HUDPReceiver:
     
     def __init__(self, sock: socket.socket):
         self.sock = sock
-        self.reliable_buffer = SelectiveRepeatBuffer(WINDOW_SIZE)
-        self.unreliable_queue = queue.Queue()
+        self.ready_queue = queue.Queue() # thread-safe
+        self.reliable_buffer = SelectiveRepeatBuffer(WINDOW_SIZE, self.ready_queue)
         self.shutdown_event = threading.Event()
         
         # Start receiver thread
@@ -35,7 +35,7 @@ class HUDPReceiver:
             except socket.timeout:
                 continue
             except Exception as e:
-                print(f"Receiver error: {e}")
+                print(f"[Receiver] Error: {e}")
     
     def _handle_reliable(self, packet: HUDPPacket, addr: Tuple[str, int]):
         """Handle reliable channel packet with selective repeat"""
@@ -55,17 +55,12 @@ class HUDPReceiver:
     
     def _handle_unreliable(self, packet: HUDPPacket):
         """Handle unreliable channel packet (no ACK)"""
-        self.unreliable_queue.put(packet)
-    
-    def recv_reliable(self, timeout: Optional[float] = 0.2) -> Optional[HUDPPacket]:
-        """Receive data from reliable channel (ordered)"""
-        packet = self.reliable_buffer.next_packet(timeout)
-        return packet if packet else None
+        self.ready_queue.put(packet)
 
-    def recv_unreliable(self, timeout: Optional[float] = 0.2) -> Optional[HUDPPacket]:
-        """Receive data from unreliable channel (unordered)"""
+    def recv(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
+        """Receive data from ready queue"""
         try:
-            packet = self.unreliable_queue.get(timeout=timeout)
+            packet = self.ready_queue.get(timeout=timeout)
             return packet
         except queue.Empty:
             return None
@@ -80,54 +75,55 @@ class HUDPReceiver:
 class SelectiveRepeatBuffer:
     """Buffer for reordering reliable packets using Selective Repeat"""
     
-    def __init__(self, window_size: int):
+    def __init__(self, window_size: int, ready_queue: queue.Queue, skip_threshold: float = 0.2):
         self.window_size = window_size
         self.rcv_base = 0  # Next expected sequence number
-        self.buffer: Dict[int, HUDPPacket] = {}
-        self.ready_queue = queue.Queue()
-        self.lock = threading.Lock() # Lock for rcv_base and buffer
+        self.buffer: Dict[int, HUDPPacket] = {} # seq_num -> packet
+        self.ready_queue: queue.Queue[HUDPPacket] = ready_queue
+        self.skip_threshold = skip_threshold
     
     def insert(self, packet: HUDPPacket) -> bool:
         """Insert packet into buffer and check if it's in window"""
         seq = packet.seq_num
         
-        with self.lock:
-            # Check if packet is within window
-            if seq < self.rcv_base:
-                # Duplicate packet, already delivered
-                return False
-            
-            if seq >= self.rcv_base + self.window_size:
-                # Out of window, drop
-                return False
+        # Check if packet is within window
+        if seq < self.rcv_base:
+            # Duplicate packet, already delivered
+            return False
         
-            # Add to buffer if not already received
-            if seq not in self.buffer:
-                self.buffer[seq] = packet
-
-            # current packet might be rcv_base
-            # Deliver consecutive packets starting from rcv_base         
-            while self.rcv_base in self.buffer:
-                packet = self.buffer.pop(self.rcv_base)
-                self.ready_queue.put(packet)
-                self.rcv_base += 1
+        if seq >= self.rcv_base + self.window_size:
+            # Out of window, drop
+            return False
+    
+        # Add to buffer if not already received
+        if seq not in self.buffer:
+            self.buffer[seq] = packet
+        
+        self._deliver_ready_packets()
+        self._check_skip_missing_packets()
         
         return True
-
-    def next_packet(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
-        """Get next ordered packet (blocking)"""
-        try:
-            return self.ready_queue.get(timeout=timeout)
-        except queue.Empty:
-            with self.lock:
-                print(f"[Receiver] Skipped seq {self.rcv_base}")
-                self.rcv_base += 1
-
-                # new rcv_base might already be buffered
-                # Deliver consecutive packets starting from rcv_base         
-                while self.rcv_base in self.buffer:
-                    packet = self.buffer.pop(self.rcv_base)
-                    self.ready_queue.put(packet)
+    
+    def _deliver_ready_packets(self):
+        """Deliver all consecutive packets from rcv_base"""
+        while self.rcv_base in self.buffer:
+            packet = self.buffer.pop(self.rcv_base)
+            self.ready_queue.put(packet)
+            self.rcv_base += 1
+    
+    def _check_skip_missing_packets(self):
+        """Skip missing packets if they exceed the threshold"""
+        if self.rcv_base not in self.buffer:
+            # Find next available packet
+            higher_seqs = [s for s in self.buffer.keys() if s > self.rcv_base]
+            if higher_seqs:
+                next_seq = min(higher_seqs)
+                packet = self.buffer.get(next_seq)
+                # If more than skip_threshold time has passed since a packet with seq > rcv_base was sent,
+                # more than skip_threshold time must have passed since packet with seq = rcv_base was FIRST sent
+                if (time.time() - packet.timestamp) >= self.skip_threshold:
+                    print(f"[Receiver] Skipping RELIABLE seq {self.rcv_base}")
                     self.rcv_base += 1
-            return None
-        
+                    # Recursively deliver and check for more skips
+                    self._deliver_ready_packets()
+                    self._check_skip_missing_packets()
