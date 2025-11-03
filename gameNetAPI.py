@@ -28,6 +28,9 @@ class GameNetAPI:
         self.unreliable_bytes_received = 0
         self.reliable_latencies = []
         self.unreliable_latencies = []
+        # J(i) = J(i-1) + (|D(i-1,i)| - J(i-1))/16
+        self.reliable_jitter = 0
+        self.unreliable_jitter = 0
 
     def send(self, payload: bytes, reliable: bool = False) -> int:
         """Send data on either reliable or unreliable channel"""
@@ -50,10 +53,14 @@ class GameNetAPI:
             if packet.channel_type == CHANNEL_RELIABLE:
                 print(f"[gameNetAPI] Received RELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
                 self.reliable_bytes_received += len(packet.payload)
+                latency_diff = abs(latency_ms - self.reliable_latencies[-1] if self.reliable_latencies else 0)
+                self.reliable_jitter = self.reliable_jitter + (latency_diff - self.reliable_jitter) / 16
                 self.reliable_latencies.append(latency_ms)
             elif packet.channel_type == CHANNEL_UNRELIABLE:
                 print(f"[gameNetAPI] Received UNRELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
                 self.unreliable_bytes_received += len(packet.payload)
+                latency_diff = abs(latency_ms - self.unreliable_latencies[-1] if self.unreliable_latencies else 0)
+                self.unreliable_jitter = self.unreliable_jitter + (latency_diff - self.unreliable_jitter) / 16
                 self.unreliable_latencies.append(latency_ms)
         return packet
 
@@ -68,10 +75,12 @@ class GameNetAPI:
         if self.reliable_latencies:
             avg_reliable_latency = sum(self.reliable_latencies) / len(self.reliable_latencies)
             print(f"    Average latency = {avg_reliable_latency:.2f} ms")
+        print(f"    Jitter = {self.reliable_jitter:.2f} ms")
         print(f"  UNRELIABLE: Packets received = {len(self.unreliable_latencies)}, throughput = {(self.unreliable_bytes_received / duration):.2f} bytes/s")
         if self.unreliable_latencies:
             avg_unreliable_latency = sum(self.unreliable_latencies) / len(self.unreliable_latencies)
             print(f"    Average latency = {avg_unreliable_latency:.2f} ms")
+        print(f"    Jitter = {self.unreliable_jitter:.2f} ms")
 
     def close(self):
         """Close the API and cleanup resources"""
