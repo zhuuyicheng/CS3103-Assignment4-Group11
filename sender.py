@@ -19,7 +19,7 @@ class HUDPSender:
         # Reliable channel state
         self.send_base = 0 # Earliest packet sent but not yet acknowledged
         self.next_seq = 0 
-        self.window: Dict[int, Tuple[HUDPPacket, float, int]] = {}  # seq -> (packet, last sent, retries)
+        self.window: Dict[int, Tuple[HUDPPacket, int]] = {}  # seq -> (packet, retries)
         self.lock = threading.Lock() # Lock for send_base, next_seq, and window
         self.condition = threading.Condition(self.lock)
         
@@ -71,7 +71,7 @@ class HUDPSender:
             self.sock.sendto(packet.serialize(), self.dest_addr)
             
             # Add to window
-            self.window[seq] = (packet, time.time(), 0)
+            self.window[seq] = (packet, 0)
             self.next_seq += 1
         
         return seq
@@ -89,16 +89,15 @@ class HUDPSender:
             except socket.timeout:
                 continue
             except Exception as e:
-                print(f"ACK receiver error: {e}")
+                print(f"[Sender] ACK receiver error: {e}")
     
     def _handle_ack(self, ack_num: int):
         """Process ACK and slide window"""
         with self.lock:
             # Remove ACKed packet from window
             if ack_num in self.window:
-                packet, sent_time, retries = self.window[ack_num]
-                rtt = time.time() - sent_time
-                print(f"[Sender] ACK received for seq={ack_num}, RTT={rtt*1000:.1f} ms, retries={retries}")
+                _, retries = self.window[ack_num]
+                print(f"[Sender] ACK received for RELIABLE seq={ack_num}, retries={retries}")
                 del self.window[ack_num]
             
             # Slide window base
@@ -114,17 +113,18 @@ class HUDPSender:
         # we keep checking how long each unACKed packet has been waiting
         while not self.shutdown_event.is_set():
             with self.lock:
-                for seq, (packet, sent_time, retries) in list(self.window.items()):
-                    if time.time() - sent_time > TIMEOUT:
+                for seq, (packet, retries) in list(self.window.items()):
+                    if time.time() - packet.timestamp > TIMEOUT:
                         if retries >= MAX_RETRIES:
-                            print(f"[Sender] Max retries reached for seq {seq}, dropping")
+                            print(f"[Sender] Max retries reached for RELIABLE seq={seq}, dropping")
                             del self.window[seq]
                         else:
                             # Retransmit
+                            packet.timestamp = time.time()
                             self.sock.sendto(packet.serialize(), self.dest_addr)
-                            self.window[seq] = (packet, time.time(), retries + 1)
-                            print(f"[Sender] Retransmitting seq {seq} (attempt {retries + 1})")
-    
+                            self.window[seq] = (packet, retries + 1)
+                            print(f"[Sender] Retransmitting RELIABLE seq={seq} (attempt {retries + 1})")
+
     def close(self):
         """Stop sender threads"""
         self.shutdown_event.set()
