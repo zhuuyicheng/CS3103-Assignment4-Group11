@@ -7,6 +7,7 @@ from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PAYLOAD
 WINDOW_SIZE = 32
 TIMEOUT = 0.2  # 200ms
 MAX_RETRIES = 5
+MAX_SEND_RATE = 100  # packets per second
 
 class HUDPSender:
     """H-UDP sender with reliable and unreliable channels"""
@@ -80,7 +81,7 @@ class HUDPSender:
         """Background thread to receive ACKs"""
         while not self.shutdown_event.is_set():
             try:
-                self.sock.settimeout(0.1) # Set timeout to periodically check self.shutdown_event
+                self.sock.settimeout(1 / MAX_SEND_RATE) # Set timeout to periodically check self.shutdown_event
                 data, _ = self.sock.recvfrom(MAX_PACKET_SIZE)
                 packet = HUDPPacket.deserialize(data)
                 

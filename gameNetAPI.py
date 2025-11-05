@@ -1,7 +1,7 @@
 import socket
 from typing import Optional, Tuple
 from packet import HUDPPacket
-from sender import HUDPSender
+from sender import HUDPSender, MAX_SEND_RATE
 from receiver import HUDPReceiver
 import time
 from packet import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE
@@ -45,7 +45,7 @@ class GameNetAPI:
             print(f"[gameNetAPI] Sent UNRELIABLE seq={seq}")
             return seq
 
-    def recv(self, timeout: Optional[float] = 0.01) -> Optional[HUDPPacket]:
+    def recv(self, timeout: Optional[float] = 1 / MAX_SEND_RATE) -> Optional[HUDPPacket]:
         """Receive data from either channel"""
         packet = self.receiver.recv(timeout=timeout)
         if packet:

@@ -4,7 +4,7 @@ import threading
 from typing import Dict, Tuple, Optional
 import queue
 from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PACKET_SIZE
-from sender import WINDOW_SIZE
+from sender import WINDOW_SIZE, MAX_SEND_RATE
 
 class HUDPReceiver:
     """H-UDP receiver with demultiplexing and selective repeat"""
@@ -23,7 +23,7 @@ class HUDPReceiver:
         """Background thread to receive and demultiplex packets"""
         while not self.shutdown_event.is_set():
             try:
-                self.sock.settimeout(0.1)
+                self.sock.settimeout(1 / MAX_SEND_RATE)
                 data, addr = self.sock.recvfrom(MAX_PACKET_SIZE)
                 packet = HUDPPacket.deserialize(data)
                 
@@ -57,7 +57,7 @@ class HUDPReceiver:
         """Handle unreliable channel packet (no ACK)"""
         self.ready_queue.put(packet)
 
-    def recv(self, timeout: Optional[float] = None) -> Optional[HUDPPacket]:
+    def recv(self, timeout: Optional[float] = 1 / MAX_SEND_RATE) -> Optional[HUDPPacket]:
         """Receive data from ready queue"""
         try:
             packet = self.ready_queue.get(timeout=timeout)
