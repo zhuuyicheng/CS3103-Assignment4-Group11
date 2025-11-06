@@ -203,8 +203,6 @@ def main() -> None:
     print("=" * 60)
     print(f"Send rate:          {args.rate:.1f} packets/s")
     print(f"Send duration:      {args.duration:.2f}s")
-    print(f"Receiver buffer:    {args.receiver_buffer:.2f}s")
-    print(f"Measurement window: {metrics['duration']:.2f}s")
 
     for channel_name, label in [("reliable", "RELIABLE"), ("unreliable", "UNRELIABLE")]:
         channel = metrics[channel_name]
