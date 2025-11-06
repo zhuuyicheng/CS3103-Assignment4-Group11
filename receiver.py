@@ -85,7 +85,7 @@ class SelectiveRepeatBuffer:
     def insert(self, packet: HUDPPacket) -> bool:
         """Insert packet into buffer and check if it's in window"""
         seq = packet.seq_num
-        
+
         # Check if packet is within window
         if seq < self.rcv_base:
             # Duplicate packet, already delivered
@@ -98,6 +98,9 @@ class SelectiveRepeatBuffer:
         # Add to buffer if not already received
         if seq not in self.buffer:
             self.buffer[seq] = packet
+            # Detect reordering (packet arrived after a higher seq packet)
+            if seq > self.rcv_base:
+                print(f"[Receiver] Detected reordering: received seq {seq} while waiting for {self.rcv_base}")
         
         self._deliver_ready_packets()
         self._check_skip_missing_packets()
@@ -110,6 +113,7 @@ class SelectiveRepeatBuffer:
             packet = self.buffer.pop(self.rcv_base)
             self.ready_queue.put(packet)
             self.rcv_base += 1
+            
     
     def _check_skip_missing_packets(self):
         """Skip missing packets if they exceed the threshold"""
