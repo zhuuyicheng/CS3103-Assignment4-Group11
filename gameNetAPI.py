@@ -4,12 +4,13 @@ from packet import HUDPPacket
 from sender import HUDPSender, MAX_SEND_RATE
 from receiver import HUDPReceiver
 import time
+import logging
 from packet import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE
 
 class GameNetAPI:
     """H-UDP API for game networking with reliable and unreliable channels"""
     
-    def __init__(self, local_addr: Tuple[str, int], remote_addr: Tuple[str, int]):
+    def __init__(self, local_addr: Tuple[str, int], remote_addr: Tuple[str, int], threshold: float = 0.2):
         self.local_addr = local_addr
         self.remote_addr = remote_addr
         
@@ -19,7 +20,7 @@ class GameNetAPI:
         
         # Create sender and receiver (they will manage their own threads)
         self.sender = HUDPSender(self.sock, remote_addr)
-        self.receiver = HUDPReceiver(self.sock)
+        self.receiver = HUDPReceiver(self.sock, threshold)
         
         # Track packet statistics
         self.sent_reliable = 0
@@ -32,17 +33,26 @@ class GameNetAPI:
         self.reliable_jitter = 0
         self.unreliable_jitter = 0
 
+        logging.basicConfig(
+            filename='log.log',  # Log file name
+            filemode='a',  # Append mode ('w' would overwrite)
+            format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
+            level=logging.INFO
+        )
+
+        logging.info(f"API Starting")
+
     def send(self, payload: bytes, reliable: bool = False) -> int:
         """Send data on either reliable or unreliable channel"""
         if reliable:
             seq = self.sender.send_reliable(payload)
             self.sent_reliable += 1
-            print(f"[gameNetAPI] Sent RELIABLE seq={seq}")
+            logging.info(f"[gameNetAPI] Sent RELIABLE seq={seq}")
             return seq
         else:
             seq = self.sender.send_unreliable(payload)
             self.sent_unreliable += 1
-            print(f"[gameNetAPI] Sent UNRELIABLE seq={seq}")
+            logging.info(f"[gameNetAPI] Sent UNRELIABLE seq={seq}")
             return seq
 
     def recv(self, timeout: Optional[float] = 1 / MAX_SEND_RATE) -> Optional[HUDPPacket]:
@@ -51,13 +61,13 @@ class GameNetAPI:
         if packet:
             latency_ms = (time.time() - packet.timestamp) * 1000
             if packet.channel_type == CHANNEL_RELIABLE:
-                print(f"[gameNetAPI] Received RELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
+                logging.info(f"[gameNetAPI] Received RELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
                 self.reliable_bytes_received += len(packet.payload)
                 latency_diff = abs(latency_ms - self.reliable_latencies[-1] if self.reliable_latencies else 0)
                 self.reliable_jitter = self.reliable_jitter + (latency_diff - self.reliable_jitter) / 16
                 self.reliable_latencies.append(latency_ms)
             elif packet.channel_type == CHANNEL_UNRELIABLE:
-                print(f"[gameNetAPI] Received UNRELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
+                logging.info(f"[gameNetAPI] Received UNRELIABLE seq={packet.seq_num}, latency={latency_ms:.1f} ms")
                 self.unreliable_bytes_received += len(packet.payload)
                 latency_diff = abs(latency_ms - self.unreliable_latencies[-1] if self.unreliable_latencies else 0)
                 self.unreliable_jitter = self.unreliable_jitter + (latency_diff - self.unreliable_jitter) / 16

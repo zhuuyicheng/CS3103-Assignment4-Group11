@@ -3,21 +3,32 @@ import time
 import threading
 from typing import Dict, Tuple, Optional
 import queue
+import logging
 from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PACKET_SIZE
 from sender import WINDOW_SIZE, MAX_SEND_RATE
 
 class HUDPReceiver:
     """H-UDP receiver with demultiplexing and selective repeat"""
     
-    def __init__(self, sock: socket.socket):
+    def __init__(self, sock: socket.socket, threshold: float):
         self.sock = sock
         self.ready_queue = queue.Queue() # thread-safe
-        self.reliable_buffer = SelectiveRepeatBuffer(WINDOW_SIZE, self.ready_queue)
+        self.reliable_buffer = SelectiveRepeatBuffer(WINDOW_SIZE, self.ready_queue, threshold)
         self.shutdown_event = threading.Event()
         
         # Start receiver thread
         self.receiver_thread = threading.Thread(target=self._receive_loop, daemon=True)
         self.receiver_thread.start()
+
+        # Create log
+        logging.basicConfig(
+            filename='log.log',  # Log file name
+            filemode='a',  # Append mode ('w' would overwrite)
+            format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
+            level=logging.INFO
+        )
+
+        logging.info(f"Receiver Starting")
     
     def _receive_loop(self):
         """Background thread to receive and demultiplex packets"""
@@ -122,7 +133,7 @@ class SelectiveRepeatBuffer:
                 # If more than skip_threshold time has passed since a packet with seq > rcv_base was sent,
                 # more than skip_threshold time must have passed since packet with seq = rcv_base was FIRST sent
                 if (time.time() - packet.timestamp) >= self.skip_threshold:
-                    print(f"[Receiver] Skipping RELIABLE seq {self.rcv_base}")
+                    logging.info(f"[Receiver] Skipping RELIABLE seq {self.rcv_base}")
                     self.rcv_base += 1
                     # Recursively deliver and check for more skips
                     self._deliver_ready_packets()

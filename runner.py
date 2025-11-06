@@ -58,12 +58,13 @@ def receiver_worker(
     remote_port: int,
     duration: float,
     buffer_time: float,
+    threshold: float,
     ready_event: threading.Event,
     stop_event: threading.Event,
     results: Dict[str, Any],
 ) -> None:
     """Receive packets until told to stop or the extended window elapses."""
-    api = GameNetAPI(("0.0.0.0", local_port), ("127.0.0.1", remote_port))
+    api = GameNetAPI(("0.0.0.0", local_port), ("127.0.0.1", remote_port), threshold)
     ready_event.set()
 
     start_time = time.time()
@@ -136,6 +137,9 @@ def main() -> None:
     parser.add_argument("--receiver-port", type=int, default=10001, help="Local port for receiver.")
     parser.add_argument("--duration", type=float, default=5.0, help="Active send duration in seconds.")
     parser.add_argument("--rate", type=float, default=20.0, help="Packets per second for the sender.")
+    parser.add_argument('--threshold', type=float, default=0.2, help='Threshold in milliseconods such that '
+                                                                     'if a packet is lost and retransmission is not '
+                                                                     'reached in t seconds, it will be skipped')
     parser.add_argument(
         "--receiver-buffer",
         type=float,
@@ -155,6 +159,7 @@ def main() -> None:
             args.sender_port,
             args.duration,
             args.receiver_buffer,
+            args.threshold,
             ready_event,
             stop_event,
             results,
@@ -205,6 +210,7 @@ def main() -> None:
     print(f"Send duration:      {args.duration:.2f}s")
     print(f"Receiver buffer:    {args.receiver_buffer:.2f}s")
     print(f"Measurement window: {metrics['duration']:.2f}s")
+    print(f"Threshold:          {args.threshold:.2f}ms")
 
     for channel_name, label in [("reliable", "RELIABLE"), ("unreliable", "UNRELIABLE")]:
         channel = metrics[channel_name]

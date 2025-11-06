@@ -1,6 +1,7 @@
 import socket
 import time
 import threading
+import logging
 from typing import Dict, Tuple
 from packet import HUDPPacket, CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, MAX_PAYLOAD_SIZE, MAX_PACKET_SIZE
 
@@ -32,6 +33,15 @@ class HUDPSender:
     
         self.timer_thread = threading.Thread(target=self._retransmit_timer, daemon=True)
         self.timer_thread.start()
+
+        logging.basicConfig(
+            filename='log.log',  # Log file name
+            filemode='a',  # Append mode ('w' would overwrite)
+            format='%(asctime)s - %(levelname)s - %(message)s',  # Log format
+            level=logging.INFO
+        )
+
+        logging.info(f"Sender Starting")
     
     def send_unreliable(self, data: bytes) -> int:
         """Send data on unreliable channel (fire and forget)"""
@@ -90,7 +100,7 @@ class HUDPSender:
             except socket.timeout:
                 continue
             except Exception as e:
-                print(f"[Sender] ACK receiver error: {e}")
+                logging.info(f"[Sender] ACK receiver error: {e}")
     
     def _handle_ack(self, ack_num: int):
         """Process ACK and slide window"""
@@ -98,7 +108,7 @@ class HUDPSender:
             # Remove ACKed packet from window
             if ack_num in self.window:
                 _, retries = self.window[ack_num]
-                print(f"[Sender] ACK received for RELIABLE seq={ack_num}, retries={retries}")
+                logging.info(f"[Sender] ACK received for RELIABLE seq={ack_num}, retries={retries}")
                 del self.window[ack_num]
             
             # Slide window base
@@ -117,14 +127,14 @@ class HUDPSender:
                 for seq, (packet, retries) in list(self.window.items()):
                     if time.time() - packet.timestamp > TIMEOUT:
                         if retries >= MAX_RETRIES:
-                            print(f"[Sender] Max retries reached for RELIABLE seq={seq}, dropping")
+                            logging.info(f"[Sender] Max retries reached for RELIABLE seq={seq}, dropping")
                             del self.window[seq]
                         else:
                             # Retransmit
                             packet.timestamp = time.time()
                             self.sock.sendto(packet.serialize(), self.dest_addr)
                             self.window[seq] = (packet, retries + 1)
-                            print(f"[Sender] Retransmitting RELIABLE seq={seq} (attempt {retries + 1})")
+                            logging.info(f"[Sender] Retransmitting RELIABLE seq={seq} (attempt {retries + 1})")
 
     def close(self):
         """Stop sender threads"""
