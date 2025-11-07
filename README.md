@@ -11,6 +11,11 @@ Alternatively:
 1. Run `python runner.py` (default duration is 5 seconds, and default packet rate is 20 packets per second)
 2. You can customize the duration and packet rate using the `--duration` and `--rate` arguments respectively.
 
+## Testing Different Skip Thresholds
+Extensive tests to retrieve performance metrics under different network conditions and different skip thresholds `t` are done using the modified code in branch `metric-testing` where `t` can be specified as a command line argument with flag `--threshold`.
+
+> Details can be found in `README.md` of branch `metric-testing`
+
 ## GameNetAPI Specification
 GameNetAPI provides a simplified interface for game networking with reliable and unreliable channels over UDP.
 
@@ -40,11 +45,3 @@ Displays collected statistics (packets, throughput, latency, jitter).
 
 #### close()
 Cleanup and shutdown sender/receiver threads.
-
-
-### Finding Value of Optimal Skip Threshold
-Extensive tests to find optimal value of skip threshold t and to retrieve performance metrics under different network
-conditions and different skip thresholds t are done using a modified version in branch `metric-testing` where the code
-is modified to allow skip threshold t to put input as a command line argument with flag `--threshold`.
-
-> Details on how to find value of optimal skip threshold through testing is in `README.md` of branch `metric-testing`
