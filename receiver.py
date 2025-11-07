@@ -127,7 +127,6 @@ class SelectiveRepeatBuffer:
                 # more than skip_threshold time must have passed since packet with seq = rcv_base was FIRST sent
                 if (time.time() - packet.timestamp) >= self.skip_threshold:
                     print(f"[Receiver] Skipping RELIABLE seq {self.rcv_base}")
-                    self.buffer.pop(self.rcv_base)
                     self.rcv_base += 1
                     # Recursively deliver and check for more skips
                     self._deliver_ready_packets()
