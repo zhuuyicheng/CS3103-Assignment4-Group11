@@ -210,7 +210,7 @@ def main() -> None:
     print(f"Send duration:      {args.duration:.2f}s")
     print(f"Receiver buffer:    {args.receiver_buffer:.2f}s")
     print(f"Measurement window: {metrics['duration']:.2f}s")
-    print(f"Threshold:          {args.threshold:.2f}ms")
+    print(f"Threshold:          {args.threshold:.2f}s")
 
     for channel_name, label in [("reliable", "RELIABLE"), ("unreliable", "UNRELIABLE")]:
         channel = metrics[channel_name]
