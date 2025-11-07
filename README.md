@@ -40,3 +40,11 @@ Displays collected statistics (packets, throughput, latency, jitter).
 
 #### close()
 Cleanup and shutdown sender/receiver threads.
+
+
+### Finding Value of Optimal Skip Threshold
+Extensive tests to find optimal value of skip threshold t and to retrieve performance metrics under different network
+conditions and different skip thresholds t are done using a modified version in branch `metric-testing` where the code
+is modified to allow skip threshold t to put input as a command line argument with flag `--threshold`.
+
+> Details on how to find value of optimal skip threshold through testing is in `README.md` of branch `metric-testing`
