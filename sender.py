@@ -119,6 +119,13 @@ class HUDPSender:
                         if retries >= MAX_RETRIES:
                             print(f"[Sender] Max retries reached for RELIABLE seq={seq}, dropping")
                             del self.window[seq]
+
+                            # Slide window base
+                            while self.send_base not in self.window and self.send_base < self.next_seq:
+                                self.send_base += 1
+
+                            # Wake up waiting thread
+                            self.condition.notify() 
                         else:
                             # Retransmit
                             packet.timestamp = time.time()
